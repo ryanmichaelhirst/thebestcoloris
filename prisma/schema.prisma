@@ -1,0 +1,43 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model GeoLocation {
+  id          Int       @id @default(autoincrement())
+  uid         String    @unique @default(dbgenerated("(concat('geo_', gen_random_uuid()))::TEXT"))
+  countryCode String
+  country     String
+  countryFlag String
+  state       String
+  stateCode   String
+  city        String
+  postalCode  String
+  ip          String
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime? @updatedAt
+  deletedAt   DateTime?
+  voteId      Int       @unique
+  vote        Vote      @relation(fields: [voteId], references: [id])
+}
+
+model Vote {
+  id          Int          @id @default(autoincrement())
+  uid         String       @unique @default(dbgenerated("(concat('vote_', gen_random_uuid()))::TEXT"))
+  color       String
+  comment     String?
+  author      String?
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime?    @updatedAt
+  deletedAt   DateTime?
+  geoLocation GeoLocation?
+}

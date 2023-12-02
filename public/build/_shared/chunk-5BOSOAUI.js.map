@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../node_modules/.pnpm/routes-gen@0.6.1/node_modules/routes-gen/src/route.ts"],
+  "sourcesContent": ["export function route<T extends string>(\n  path: T,\n  params?: Record<string, any>\n): T {\n  if (params) {\n    const segments = path.split(/\\/+/).map((segment) => {\n      if (segment.startsWith(\":\")) {\n        const key = segment.replace(\":\", \"\").replace(\"?\", \"\");\n\n        if (key in params) {\n          return params[key];\n        }\n\n        // If the segment is optional and it doesn't exist in params, return null to omit it from the resulting path\n        if (segment.endsWith(\"?\")) {\n          return null;\n        }\n      }\n\n      return segment;\n    });\n\n    // Filter out any null/undefined segments and join remaining segments\n    return segments.filter((value) => value != null).join(\"/\") as T;\n  }\n\n  return path;\n}\n"],
+  "mappings": ";;;;;;;;;AAAO,aAAS,MAAM,MAAM,QAAQ;AAClC,UAAI,QAAQ;AACV,cAAM,WAAW,KAAK,MAAM,KAAK,EAAE,IAAI,CAAC,YAAY;AAClD,cAAI,QAAQ,WAAW,GAAG,GAAG;AAC3B,kBAAM,MAAM,QAAQ,QAAQ,KAAK,EAAE,EAAE,QAAQ,KAAK,EAAE;AACpD,gBAAI,OAAO,QAAQ;AACjB,qBAAO,OAAO,GAAG;YAC3B;AACQ,gBAAI,QAAQ,SAAS,GAAG,GAAG;AACzB,qBAAO;YACjB;UACA;AACM,iBAAO;QACb,CAAK;AACD,eAAO,SAAS,OAAO,CAAC,UAAU,SAAS,IAAI,EAAE,KAAK,GAAG;MAC7D;AACE,aAAO;IACT;;;;",
+  "names": []
+}
