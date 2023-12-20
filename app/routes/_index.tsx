@@ -39,8 +39,6 @@ type LoaderReturnType = Awaited<
   ReturnType<typeof useTypedLoaderData<typeof loader>>
 >;
 
-const RADAR_API_KEY = "prj_test_sk_f2e275403233a445c71341a35465f040a812452e";
-
 type GeocodeIpResponse = {
   meta: {
     code: 200;
@@ -91,6 +89,8 @@ export function getFlagEmoji(countryCode: string) {
 }
 
 export const action = async (args: DataFunctionArgs) => {
+  invariant(process.env.RADAR_API_KEY, "Missing RADAR_API_KEY");
+
   const formData = await args.request.formData();
   const color = formData.get("color") as string;
   const comment = formData.get("comment") as string;
@@ -110,7 +110,7 @@ export const action = async (args: DataFunctionArgs) => {
     // first try to create GeoLocation record using Radar API
     const response = await fetch("https://api.radar.io/v1/geocode/ip", {
       headers: {
-        Authorization: RADAR_API_KEY,
+        Authorization: process.env.RADAR_API_KEY,
       },
     });
     invariant(response.status === 200, "Radar api request failed");
