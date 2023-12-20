@@ -6,6 +6,7 @@ import {
 import { useEffect } from "react";
 import { useEventSource } from "remix-utils/sse/react";
 
+// Server-sent events example taken from https://github.com/moishinetzer/remix-live-loader
 export function useLiveLoader<T>() {
   const path = useResolvedPath("./stream");
   const data = useEventSource(path.pathname);

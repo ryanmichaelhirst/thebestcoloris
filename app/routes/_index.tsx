@@ -1,9 +1,13 @@
 import { db } from "@/lib/db.server";
-import { cn, formatDateMMDDYYYY } from "@/utils";
+import { cn, formatRelativeTime } from "@/utils";
 import { DataFunctionArgs } from "@remix-run/node";
 import { Form } from "@remix-run/react";
 import { ChangeEvent, useEffect, useState } from "react";
-import { typedjson, useTypedActionData } from "remix-typedjson";
+import {
+  typedjson,
+  useTypedActionData,
+  useTypedLoaderData,
+} from "remix-typedjson";
 import invariant from "tiny-invariant";
 import { toast } from "react-hot-toast";
 import { AnimatePresence, motion } from "framer-motion";
@@ -31,6 +35,9 @@ export const loader = async () => {
 
   return typedjson({ latestVote, voteCount });
 };
+type LoaderReturnType = Awaited<
+  ReturnType<typeof useTypedLoaderData<typeof loader>>
+>;
 
 const RADAR_API_KEY = "prj_test_sk_f2e275403233a445c71341a35465f040a812452e";
 
@@ -341,17 +348,58 @@ function renderFormToast(submittedColor: string) {
   ));
 }
 
+function SubmissionCard(props: LoaderReturnType) {
+  const authorName = props.latestVote?.author ?? "Anonymous";
+  const comment = props.latestVote?.comment ?? "";
+
+  return (
+    <div className="rounded-lg shadow-lg border border-gray-100 bg-white text-gray-900">
+      <div className="border-b border-gray-500">
+        <div className="flex justify-between px-4 py-1">
+          <div className="flex items-center">
+            <p>{authorName}</p>
+            <div
+              className="h-1 w-1 mx-2 rounded-full"
+              style={{ background: props.latestVote?.color ?? "#000000" }}
+            />
+            {props.latestVote?.createdAt && (
+              <p className="text-gray-600">
+                {formatRelativeTime(props.latestVote.createdAt)}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center space-x-2">
+            <div
+              className="rounded text-white text-xs py-0.5 px-1"
+              style={{ background: props.latestVote?.color ?? "#000000" }}
+            >
+              {props.latestVote?.geoLocation?.city},{" "}
+              {props.latestVote?.geoLocation?.stateCode}
+            </div>
+            <p className="text-lg">
+              {props.latestVote?.geoLocation?.countryFlag}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <p>{comment}</p>
+      </div>
+
+      <div className="align-bottom pl-4 pb-2">
+        <p className="text-gray-600 text-xs">Vote #{props.voteCount}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function Index() {
   const data = useLiveLoader<typeof loader>();
   console.log("the data", data.latestVote);
   const actionData = useTypedActionData<typeof action>();
 
-  const authorName = data.latestVote?.author ?? "Anonymous";
   const theBestColor = data.latestVote?.color;
-  const commentDash = data.latestVote?.comment ? "-" : "";
-  const comment = data.latestVote?.comment
-    ? `"${data.latestVote.comment}"`
-    : "";
 
   // after the form is submitted, render a toast
   useEffect(() => {
@@ -383,39 +431,7 @@ export default function Index() {
           </div>
         </div>
 
-        <div className="rounded-lg shadow-lg border border-gray-100 bg-white text-gray-900">
-          <div className="border-b border-gray-500">
-            <div className="flex justify-between px-4 py-1">
-              <div className="flex items-center">
-                <p className="text-gray-600">Submission #{data.voteCount}</p>
-              </div>
-              <div className="flex items-center space-x-2">
-                <div
-                  className="rounded text-white text-xs py-0.5 px-1"
-                  style={{ background: data.latestVote?.color ?? "#000000" }}
-                >
-                  {data.latestVote?.geoLocation?.city},{" "}
-                  {data.latestVote?.geoLocation?.stateCode}
-                </div>
-                <p className="text-lg">
-                  {data.latestVote?.geoLocation?.countryFlag}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-4">
-            <p>{comment}</p>
-            <p className="font-semibold">
-              {commentDash} {authorName}
-            </p>
-            {data.latestVote?.createdAt && (
-              <p className="text-gray-600">
-                {formatDateMMDDYYYY(data.latestVote.createdAt)}
-              </p>
-            )}
-          </div>
-        </div>
+        <SubmissionCard {...data} />
 
         <div className="rounded shadow space-y-2 p-4 bg-white">
           <p className="text-slate-500 text-center text-sm">
