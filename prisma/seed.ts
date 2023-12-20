@@ -1,18 +1,10 @@
 import { db } from "@/lib/db.server";
+import { getFlagEmoji } from "@/routes/_index";
 import { fakerEN_US as faker } from "@faker-js/faker";
 
 function getRandomHexColor() {
   const hex = Math.floor(Math.random() * 16777215).toString(16);
   return `#${hex}`;
-}
-
-function getFlagEmoji(countryCode: string) {
-  const codePoints = countryCode
-    .toUpperCase()
-    .split("")
-    // @ts-expect-error Typescript complaining but this works
-    .map((char) => 127397 + char.charCodeAt());
-  return String.fromCodePoint(...codePoints);
 }
 
 async function main() {

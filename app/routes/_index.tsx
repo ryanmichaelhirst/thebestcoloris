@@ -11,9 +11,10 @@ import {
 import invariant from "tiny-invariant";
 import { toast } from "react-hot-toast";
 import { AnimatePresence, motion } from "framer-motion";
+import { getClientIPAddress } from "remix-utils/get-client-ip-address";
 
 export const loader = async () => {
-  const latestVote = await db.vote.findFirstOrThrow({
+  const latestVote = await db.vote.findFirst({
     orderBy: {
       createdAt: "desc",
     },
@@ -42,24 +43,47 @@ type GeocodeIpResponse = {
   address: {
     countryCode: string; // "US"
     country: string; // "United States"
-    countryFlag: string; // "🇺🇸";
-    state: string; // "South Carolina";
-    stateCode: string; // "SC";
-    city: string; // "Beaufort";
-    postalCode: string; // "29902";
-    latitude: number; // 32.4301;
-    longitude: number; // -80.6694;
-    layer: string; // "locality";
+    countryFlag: string; // "🇺🇸"
+    state: string; // "South Carolina"
+    stateCode: string; // "SC"
+    city: string; // "Beaufort"
+    postalCode: string; // "29902"
+    latitude: number; // 32.4301
+    longitude: number; // -80.6694
+    layer: string; // "locality"
     geometry: {
-      type: string; // "Point";
-      coordinates: number[]; // [-80.6694, 32.4301];
+      type: string; // "Point"
+      coordinates: number[]; // [-80.6694, 32.4301]
     };
-    dma: string; // "Savannah";
-    dmaCode: string; // "507";
+    dma: string; // "Savannah"
+    dmaCode: string; // "507"
   };
-  proxy: boolean; // false;
-  ip: string; // "207.182.83.177";
+  proxy: boolean; // false
+  ip: string; // "207.182.83.177"
 };
+
+// https://ip-api.com/docs/api:json#test
+type IpApiResponse = {
+  query: string; // "24.48.0.1"
+  status: string; // "success"
+  country: string; // "Canada"
+  countryCode: string; // "CA"
+  region: string; // "QC"
+  regionName: string; // "Quebec"
+  city: string; // "Montreal"
+  zip: string; // "H1K"
+  lat: number; // 45.6085
+  lon: number; // -73.5493
+};
+
+export function getFlagEmoji(countryCode: string) {
+  const codePoints = countryCode
+    .toUpperCase()
+    .split("")
+    // @ts-expect-error Typescript complaining but this works
+    .map((char) => 127397 + char.charCodeAt());
+  return String.fromCodePoint(...codePoints);
+}
 
 export const action = async (args: DataFunctionArgs) => {
   const formData = await args.request.formData();
@@ -78,30 +102,72 @@ export const action = async (args: DataFunctionArgs) => {
 
   // create GeoLocation record
   try {
+    // first try to create GeoLocation record using Radar API
     const response = await fetch("https://api.radar.io/v1/geocode/ip", {
       headers: {
         Authorization: RADAR_API_KEY,
       },
     });
-    const geocode: GeocodeIpResponse = await response.json();
-    invariant(geocode.meta.code === 200, "Failed to get geocode");
+    invariant(response.status === 200, "Radar api request failed");
 
-    const geoLocation = await db.geoLocation.create({
+    const data: GeocodeIpResponse = await response.json();
+    invariant(data.meta.code === 200, "Radar json failed");
+
+    await db.geoLocation.create({
       data: {
-        countryCode: geocode.address.countryCode,
-        country: geocode.address.country,
-        countryFlag: geocode.address.countryFlag,
-        state: geocode.address.state,
-        stateCode: geocode.address.stateCode,
-        city: geocode.address.city,
-        postalCode: geocode.address.postalCode,
-        ip: geocode.ip,
+        countryCode: data.address.countryCode,
+        country: data.address.country,
+        countryFlag: data.address.countryFlag,
+        state: data.address.state,
+        stateCode: data.address.stateCode,
+        city: data.address.city,
+        postalCode: data.address.postalCode,
+        ip: data.ip,
         voteId: vote.id,
       },
     });
   } catch (error) {
-    console.log("Error creating GeoLocation record");
-    console.log(error);
+    try {
+      // if we are rate limited, use IpApi instead
+      const ipAddress = getClientIPAddress(args.request);
+      const response = await fetch(
+        `http://ip-api.com/json/${ipAddress}?fields=57599`
+      );
+      if (response.status === 429) {
+        throw new Error("Rate limit exceeded");
+      }
+
+      const data: IpApiResponse = await response.json();
+      invariant(data.status === "success", "Ip Api json failed");
+
+      await db.geoLocation.create({
+        data: {
+          countryCode: data.countryCode,
+          country: data.country,
+          countryFlag: getFlagEmoji(data.countryCode),
+          state: data.regionName,
+          stateCode: data.region,
+          city: data.city,
+          postalCode: data.zip,
+          ip: data.query,
+          voteId: vote.id,
+        },
+      });
+    } catch (ipApiError) {
+      // number of requests remaining in the current rate limit window
+      const numRequestsLeft = args.request.headers.get("X-Rl");
+      // number of seconds until the limit is reset
+      const secondsUntilReset = args.request.headers.get("X-Ttl");
+
+      return typedjson({
+        error: {
+          message: "Api rate limit exceeded",
+          metadata: {
+            secondsUntilReset,
+          },
+        },
+      });
+    }
   }
 
   return typedjson({ vote });
@@ -271,15 +337,24 @@ export default function Index() {
   const data = useTypedLoaderData<typeof loader>();
   const actionData = useTypedActionData<typeof action>();
 
-  const authorName = data.latestVote.author ?? "Anonymous";
-  const theBestColor = data.latestVote.color;
-  const commentDash = data.latestVote.comment ? "-" : "";
-  const comment = data.latestVote.comment ? `"${data.latestVote.comment}"` : "";
+  const authorName = data.latestVote?.author ?? "Anonymous";
+  const theBestColor = data.latestVote?.color;
+  const commentDash = data.latestVote?.comment ? "-" : "";
+  const comment = data.latestVote?.comment
+    ? `"${data.latestVote.comment}"`
+    : "";
 
   // after the form is submitted, render a toast
   useEffect(() => {
-    if (!actionData?.vote.color) return;
-    renderFormToast(actionData.vote.color);
+    if (!actionData) {
+    } else if ("error" in actionData) {
+      const secondsUntilReset = actionData.error.metadata.secondsUntilReset;
+      toast.error(
+        `Api rate limit exceeded. Try again in ${secondsUntilReset} seconds`
+      );
+    } else if ("vote" in actionData) {
+      renderFormToast(actionData.vote.color);
+    }
   }, [actionData]);
 
   return (
@@ -294,9 +369,9 @@ export default function Index() {
             <div className="flex items-center justify-center space-x-2 mt-1">
               <div
                 className="rounded-full h-8 w-8"
-                style={{ background: data.latestVote.color }}
+                style={{ background: data.latestVote?.color }}
               />
-              <p className="text-xl">{data.latestVote.color}</p>
+              <p className="text-xl">{data.latestVote?.color}</p>
             </div>
           </div>
         </div>
@@ -308,12 +383,15 @@ export default function Index() {
                 <p className="text-gray-600">Submission #{data.voteCount}</p>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="rounded text-white text-xs bg-teal-800 py-0.5 px-1">
-                  {data.latestVote.geoLocation?.city},{" "}
-                  {data.latestVote.geoLocation?.stateCode}
+                <div
+                  className="rounded text-white text-xs py-0.5 px-1"
+                  style={{ background: data.latestVote?.color ?? "#000000" }}
+                >
+                  {data.latestVote?.geoLocation?.city},{" "}
+                  {data.latestVote?.geoLocation?.stateCode}
                 </div>
                 <p className="text-lg">
-                  {data.latestVote.geoLocation?.countryFlag}
+                  {data.latestVote?.geoLocation?.countryFlag}
                 </p>
               </div>
             </div>
@@ -324,9 +402,11 @@ export default function Index() {
             <p className="font-semibold">
               {commentDash} {authorName}
             </p>
-            <p className="text-gray-600">
-              {formatDateMMDDYYYY(data.latestVote.createdAt)}
-            </p>
+            {data.latestVote?.createdAt && (
+              <p className="text-gray-600">
+                {formatDateMMDDYYYY(data.latestVote.createdAt)}
+              </p>
+            )}
           </div>
         </div>
 
@@ -340,7 +420,8 @@ export default function Index() {
             <Input label="Your Name" name="author" optional />
             <button
               type="submit"
-              className="text-sm rounded py-2 px-4 text-white hover:opacity-60 bg-teal-800"
+              className="text-sm rounded py-2 px-4 text-white hover:opacity-60"
+              style={{ background: theBestColor ?? "#000000" }}
             >
               Submit
             </button>
