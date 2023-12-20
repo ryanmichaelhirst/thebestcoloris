@@ -3,15 +3,13 @@ import { cn, formatDateMMDDYYYY } from "@/utils";
 import { DataFunctionArgs } from "@remix-run/node";
 import { Form } from "@remix-run/react";
 import { ChangeEvent, useEffect, useState } from "react";
-import {
-  typedjson,
-  useTypedActionData,
-  useTypedLoaderData,
-} from "remix-typedjson";
+import { typedjson, useTypedActionData } from "remix-typedjson";
 import invariant from "tiny-invariant";
 import { toast } from "react-hot-toast";
 import { AnimatePresence, motion } from "framer-motion";
 import { getClientIPAddress } from "remix-utils/get-client-ip-address";
+import { useLiveLoader } from "@/utils/useLiveLoader";
+import { emitter } from "@/utils/emitter.server";
 
 export const loader = async () => {
   const latestVote = await db.vote.findFirst({
@@ -170,6 +168,10 @@ export const action = async (args: DataFunctionArgs) => {
     }
   }
 
+  // Here we are emitting an event to the "chat" event stream
+  // which will trigger a revalidation of the data in the useLiveLoader hook
+  // for all clients listening to the event stream
+  emitter.emit("sse");
   return typedjson({ vote });
 };
 
@@ -195,6 +197,12 @@ function ColorInput(props: { defaultValue?: string }) {
   const [selectedColor, setSelectedColor] = useState(
     props.defaultValue ?? "#000000"
   );
+
+  useEffect(() => {
+    if (props.defaultValue && props.defaultValue !== selectedColor) {
+      setSelectedColor(props.defaultValue);
+    }
+  }, [props.defaultValue]);
 
   const handleColorChange = (e: ChangeEvent<HTMLInputElement>) => {
     const newColor = e.target.value;
@@ -334,7 +342,8 @@ function renderFormToast(submittedColor: string) {
 }
 
 export default function Index() {
-  const data = useTypedLoaderData<typeof loader>();
+  const data = useLiveLoader<typeof loader>();
+  console.log("the data", data.latestVote);
   const actionData = useTypedActionData<typeof action>();
 
   const authorName = data.latestVote?.author ?? "Anonymous";
@@ -362,17 +371,15 @@ export default function Index() {
       className="flex flex-col h-full p-8 space-y-4"
       style={{ background: theBestColor }}
     >
-      <div className="container mx-auto lg:px-72 space-y-3">
-        <div className="flex items-center justify-center">
-          <div className="space-y-2 p-4 bg-white rounded-lg shadow-lg">
-            <h1 className="text-3xl">THE BEST COLOR IS</h1>
-            <div className="flex items-center justify-center space-x-2 mt-1">
-              <div
-                className="rounded-full h-8 w-8"
-                style={{ background: data.latestVote?.color }}
-              />
-              <p className="text-xl">{data.latestVote?.color}</p>
-            </div>
+      <div className="container mx-auto w-[450px] space-y-3">
+        <div className="flex">
+          <div className="inline-flex space-x-2 items-center justify-center p-4 bg-white rounded-lg shadow-lg w-full">
+            <h1 className="text-3xl text-center">THE BEST COLOR IS</h1>
+            <div
+              className="rounded-full h-8 w-8 cursor-pointer"
+              style={{ background: data.latestVote?.color }}
+              title={data.latestVote?.color}
+            />
           </div>
         </div>
 
