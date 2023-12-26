@@ -1,6 +1,6 @@
 import { LinksFunction } from "@remix-run/node";
 import { Links, Meta, Outlet, Scripts, LiveReload } from "@remix-run/react";
-import stylesheet from "../tailwind.css";
+import stylesheet from "@/styles/tailwind.css";
 import Layout from "@/routes/_layout";
 import { Toaster } from "react-hot-toast";
 import { db } from "@/lib/db.server";
