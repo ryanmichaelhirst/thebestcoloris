@@ -1,6 +1,6 @@
 import { db } from "@/lib/db.server";
 import { cn, formatRelativeTime } from "@/utils";
-import { DataFunctionArgs } from "@remix-run/node";
+import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { Form } from "@remix-run/react";
 import { ChangeEvent, useEffect, useState } from "react";
 import {
@@ -11,11 +11,13 @@ import {
 import invariant from "tiny-invariant";
 import { toast } from "react-hot-toast";
 import { AnimatePresence, motion } from "framer-motion";
-import { getClientIPAddress } from "remix-utils/get-client-ip-address";
 import { useLiveLoader } from "@/utils/useLiveLoader";
 import { emitter } from "@/utils/emitter.server";
 
-export const loader = async () => {
+type LoaderReturnType = Awaited<
+  ReturnType<typeof useTypedLoaderData<typeof loader>>
+>;
+export const loader = async (args: LoaderFunctionArgs) => {
   const latestVote = await db.vote.findFirst({
     orderBy: {
       createdAt: "desc",
@@ -34,35 +36,6 @@ export const loader = async () => {
   const voteCount = await db.vote.count();
 
   return typedjson({ latestVote, voteCount });
-};
-type LoaderReturnType = Awaited<
-  ReturnType<typeof useTypedLoaderData<typeof loader>>
->;
-
-type GeocodeIpResponse = {
-  meta: {
-    code: 200;
-  };
-  address: {
-    countryCode: string; // "US"
-    country: string; // "United States"
-    countryFlag: string; // "🇺🇸"
-    state: string; // "South Carolina"
-    stateCode: string; // "SC"
-    city: string; // "Beaufort"
-    postalCode: string; // "29902"
-    latitude: number; // 32.4301
-    longitude: number; // -80.6694
-    layer: string; // "locality"
-    geometry: {
-      type: string; // "Point"
-      coordinates: number[]; // [-80.6694, 32.4301]
-    };
-    dma: string; // "Savannah"
-    dmaCode: string; // "507"
-  };
-  proxy: boolean; // false
-  ip: string; // "207.182.83.177"
 };
 
 // https://ip-api.com/docs/api:json#test
@@ -88,9 +61,7 @@ export function getFlagEmoji(countryCode: string) {
   return String.fromCodePoint(...codePoints);
 }
 
-export const action = async (args: DataFunctionArgs) => {
-  invariant(process.env.RADAR_API_KEY, "Missing RADAR_API_KEY");
-
+export const action = async (args: ActionFunctionArgs) => {
   const formData = await args.request.formData();
   const color = formData.get("color") as string;
   const comment = formData.get("comment") as string;
@@ -105,74 +76,49 @@ export const action = async (args: DataFunctionArgs) => {
     },
   });
 
-  // create GeoLocation record
   try {
-    // first try to create GeoLocation record using Radar API
-    const response = await fetch("https://api.radar.io/v1/geocode/ip", {
-      headers: {
-        Authorization: process.env.RADAR_API_KEY,
-      },
-    });
-    invariant(response.status === 200, "Radar api request failed");
+    // https://www.ipify.org/
+    const ipAddress = await (await fetch("https://api.ipify.org")).text();
+    invariant(ipAddress, "ip address not found");
 
-    const data: GeocodeIpResponse = await response.json();
-    invariant(data.meta.code === 200, "Radar json failed");
+    const response = await fetch(
+      `http://ip-api.com/json/${ipAddress}?fields=57599`
+    );
+    if (response.status === 429) {
+      throw new Error("ip-api rate limit exceeded");
+    }
 
+    const data: IpApiResponse = await response.json();
+    invariant(data.status === "success", "ip-api request failed");
+
+    // create GeoLocation record
     await db.geoLocation.create({
       data: {
-        countryCode: data.address.countryCode,
-        country: data.address.country,
-        countryFlag: data.address.countryFlag,
-        state: data.address.state,
-        stateCode: data.address.stateCode,
-        city: data.address.city,
-        postalCode: data.address.postalCode,
-        ip: data.ip,
+        countryCode: data.countryCode,
+        country: data.country,
+        countryFlag: getFlagEmoji(data.countryCode),
+        state: data.regionName,
+        stateCode: data.region,
+        city: data.city,
+        postalCode: data.zip,
+        ip: data.query,
         voteId: vote.id,
       },
     });
-  } catch (error) {
-    try {
-      // if we are rate limited, use IpApi instead
-      const ipAddress = getClientIPAddress(args.request);
-      const response = await fetch(
-        `http://ip-api.com/json/${ipAddress}?fields=57599`
-      );
-      if (response.status === 429) {
-        throw new Error("Rate limit exceeded");
-      }
+  } catch (ipApiError) {
+    // number of requests remaining in the current rate limit window
+    // const numRequestsLeft = args.request.headers.get("X-Rl");
+    // number of seconds until the limit is reset
+    const secondsUntilReset = args.request.headers.get("X-Ttl");
 
-      const data: IpApiResponse = await response.json();
-      invariant(data.status === "success", "Ip Api json failed");
-
-      await db.geoLocation.create({
-        data: {
-          countryCode: data.countryCode,
-          country: data.country,
-          countryFlag: getFlagEmoji(data.countryCode),
-          state: data.regionName,
-          stateCode: data.region,
-          city: data.city,
-          postalCode: data.zip,
-          ip: data.query,
-          voteId: vote.id,
+    return typedjson({
+      error: {
+        message: "Geo location could not be determined",
+        metadata: {
+          secondsUntilReset,
         },
-      });
-    } catch (ipApiError) {
-      // number of requests remaining in the current rate limit window
-      const numRequestsLeft = args.request.headers.get("X-Rl");
-      // number of seconds until the limit is reset
-      const secondsUntilReset = args.request.headers.get("X-Ttl");
-
-      return typedjson({
-        error: {
-          message: "Api rate limit exceeded",
-          metadata: {
-            secondsUntilReset,
-          },
-        },
-      });
-    }
+      },
+    });
   }
 
   // Here we are emitting an event to the "chat" event stream
@@ -396,7 +342,6 @@ function SubmissionCard(props: LoaderReturnType) {
 
 export default function Index() {
   const data = useLiveLoader<typeof loader>();
-  console.log("the data", data.latestVote);
   const actionData = useTypedActionData<typeof action>();
 
   const theBestColor = data.latestVote?.color;
