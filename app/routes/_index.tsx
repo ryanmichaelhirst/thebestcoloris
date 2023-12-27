@@ -13,6 +13,7 @@ import { toast } from "react-hot-toast";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLiveLoader } from "@/utils/useLiveLoader";
 import { emitter } from "@/utils/emitter.server";
+// import { getClientIPAddress } from "remix-utils/get-client-ip-address";
 
 type LoaderReturnType = Awaited<
   ReturnType<typeof useTypedLoaderData<typeof loader>>
@@ -77,6 +78,7 @@ export const action = async (args: ActionFunctionArgs) => {
   });
 
   try {
+    // const ipAddress = getClientIPAddress(args.request);
     // https://www.ipify.org/
     const ipAddress = await (await fetch("https://api.ipify.org")).text();
     invariant(ipAddress, "ip address not found");
