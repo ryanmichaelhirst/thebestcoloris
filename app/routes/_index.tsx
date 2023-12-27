@@ -67,6 +67,7 @@ export const action = async (args: ActionFunctionArgs) => {
   const color = formData.get("color") as string;
   const comment = formData.get("comment") as string;
   const author = formData.get("author") as string;
+  const ipAddress = formData.get("ip-address");
 
   // create Vote record
   const vote = await db.vote.create({
@@ -78,10 +79,10 @@ export const action = async (args: ActionFunctionArgs) => {
   });
 
   try {
-    // const ipAddress = getClientIPAddress(args.request);
-    // https://www.ipify.org/
-    const ipAddress = await (await fetch("https://api.ipify.org")).text();
-    invariant(ipAddress, "ip address not found");
+    // const ipAddress = get getClientIpAddress(args.request);
+    if (!ipAddress) {
+      throw new Error("ip address not found");
+    }
 
     const response = await fetch(
       `http://ip-api.com/json/${ipAddress}?fields=57599`
@@ -265,7 +266,7 @@ function renderFormToast(submittedColor: string) {
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
-              stroke-width="3"
+              strokeWidth="3"
               stroke="white"
               className="w-4 h-4"
             >
@@ -278,8 +279,8 @@ function renderFormToast(submittedColor: string) {
                   duration: 0.5,
                   ease: "easeIn",
                 }}
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 d="M4.5 12.75l6 6 9-13.5"
               />
             </svg>
@@ -345,6 +346,7 @@ function SubmissionCard(props: LoaderReturnType) {
 export default function Index() {
   const data = useLiveLoader<typeof loader>();
   const actionData = useTypedActionData<typeof action>();
+  const [ipAddress, setIpAddress] = useState("");
 
   const theBestColor = data.latestVote?.color;
 
@@ -360,6 +362,19 @@ export default function Index() {
       renderFormToast(actionData.vote.color);
     }
   }, [actionData]);
+
+  // get client ip address
+  useEffect(() => {
+    async function getIpAddress() {
+      if (!ipAddress) {
+        const ipAddress = await (await fetch("https://api.ipify.org")).text();
+        invariant(ipAddress, "ip address not found");
+        setIpAddress(ipAddress);
+      }
+    }
+
+    getIpAddress();
+  }, []);
 
   return (
     <div
@@ -388,6 +403,7 @@ export default function Index() {
             <ColorInput defaultValue={theBestColor} />
             <TextArea label="Comment" name="comment" optional />
             <Input label="Your Name" name="author" optional />
+            <input type="hidden" name="ip-address" value={ipAddress} />
             <button
               type="submit"
               className="text-sm rounded py-2 px-4 text-white hover:opacity-60"
