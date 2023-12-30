@@ -13,7 +13,9 @@
     "dev:postgres": "docker-compose -f docker-compose.dev.yaml up -d",
     "dev": "run-p dev:*",
     "deploy:db": "prisma migrate deploy",
+    "docker": "docker-compose -f docker-compose.dev.yaml up -d",
     "start": "NODE_ENV=production node ./build/server.js",
+    "setup": "prisma generate && prisma migrate deploy && prisma db seed",
     "clean": "find ./ -name \".DS_Store\" -print -delete",
     "typecheck": "tsc"
   },
