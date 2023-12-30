@@ -2,7 +2,7 @@ import { db } from "@/lib/db.server";
 import { cn, formatRelativeTime } from "@/utils";
 import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { Form } from "@remix-run/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, ChangeEvent } from "react";
 import {
   typedjson,
   useTypedActionData,
