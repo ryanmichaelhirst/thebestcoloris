@@ -2,7 +2,7 @@ import { db } from "@/lib/db.server";
 import { cn, formatRelativeTime } from "@/utils";
 import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { Form } from "@remix-run/react";
-import { ChangeEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   typedjson,
   useTypedActionData,
@@ -13,6 +13,7 @@ import { toast } from "react-hot-toast";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLiveLoader } from "@/utils/useLiveLoader";
 import { emitter } from "@/utils/emitter.server";
+import { ClientOnly } from "remix-utils/client-only";
 // import { getClientIPAddress } from "remix-utils/get-client-ip-address";
 
 type LoaderReturnType = Awaited<
@@ -190,14 +191,18 @@ function ColorInput(props: { defaultValue?: string }) {
       </div>
 
       {/* Hidden input for color picker */}
-      <input
-        name="color"
-        type="color"
-        id="color-picker"
-        className="absolute top-0 left-0 opacity-0 cursor-pointer"
-        onChange={handleColorChange}
-        value={selectedColor}
-      />
+      <ClientOnly>
+        {() => (
+          <input
+            name="color"
+            type="color"
+            id="color-picker"
+            className="absolute top-0 left-0 opacity-0 cursor-pointer"
+            onChange={handleColorChange}
+            value={selectedColor}
+          />
+        )}
+      </ClientOnly>
     </div>
   );
 }
