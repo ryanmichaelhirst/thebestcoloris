@@ -6,7 +6,6 @@ RUN npm i -g pnpm
 
 # set for base and all layer that inherit from it
 ENV NODE_ENV production
-ENV PORT 8080
 
 # Install openssl for Prisma
 RUN apt-get update && apt-get install -y openssl
@@ -53,16 +52,16 @@ FROM base
 WORKDIR /myapp
 
 COPY --from=production-deps /myapp/node_modules /myapp/node_modules
-# COPY --from=build /myapp/node_modules/.prisma /myapp/node_modules/.prisma
-COPY --from=build /myapp/node_modules/.pnpm/@prisma+client@5.6.0_prisma@5.6.0/node_modules/.prisma/client /myapp/node_modules/.pnpm/@prisma+client@5.6.0_prisma@5.6.0/node_modules/.prisma/client
-
+COPY --from=build /myapp/node_modules/prisma /myapp_node_modules/prisma
 COPY --from=build /myapp/build /myapp/build
 COPY --from=build /myapp/public /myapp/public
+
 ADD . .
 
 RUN npx prisma generate
 
-EXPOSE 3000
-EXPOSE 8080
+# If you would like to explicitly set a port: https://docs.railway.app/guides/public-networking#user-defined-port
+# ENV PORT 8080
+# EXPOSE 8080
 
 CMD ["pnpm", "start"]
