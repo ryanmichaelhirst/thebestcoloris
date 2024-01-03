@@ -9,7 +9,7 @@
     "build:remix": "remix build",
     "build:server": "esbuild --bundle --minify --keep-names --sourcemap --platform=node --format=cjs --outdir=build --loader:.node=copy server.ts",
     "dev:server": "remix dev -c \"tsx server.ts\"",
-    "dev:routes": "routes-gen -d @routes-gen/remix",
+    "dev:routes": "routes-gen -w -d @routes-gen/remix",
     "dev:postgres": "docker-compose -f docker-compose.dev.yaml up -d",
     "dev": "run-p dev:*",
     "deploy:db": "prisma migrate deploy",
